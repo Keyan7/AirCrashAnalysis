@@ -1,0 +1,457 @@
+---
+title: "Project"
+author: "Keyan Chen"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(dpi = 600,
+                      echo = TRUE, 
+                      fig.keep = TRUE,
+                      cache = TRUE)
+```
+
+```{r}
+sessionInfo()
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(factoextra)
+library(gridExtra)
+library(mltools)
+library(tmaptools)
+
+set.seed(729)
+```
+
+```{r message=FALSE, warning=FALSE}
+my.data <- read_csv("Airplane_Crashes_and_Fatalities_Since_1908.csv") %>% 
+  tibble()
+```
+
+# Data Wrangle
+
+```{r}
+head(my.data)
+tail(my.data)
+```
+
+First, we need to deal with the missing values. 
+
+```{r}
+my.data$Time[is.na(my.data$Time)] <- '00:00'
+my.data$Time <- str_replace_all(my.data$Time, 'c: ', '')
+my.data$Time <- str_replace_all(my.data$Time, 'c:', '')
+my.data$Time <- str_replace_all(my.data$Time, 'c', '')
+my.data$Time <- str_replace_all(my.data$Time, '\'', ':')
+my.data$Time <- str_replace_all(my.data$Time, '\\.', ':')
+my.data$Time[!is.na(str_match(my.data$Time, '[0-9]{4}'))]
+```
+
+Modify the time `0943`. 
+
+```{r}
+my.data$Time <- str_replace_all(my.data$Time, '0943', '09:43')
+```
+
+```{r}
+my.data$Time[!is.na(str_match(my.data$Time, '[0-9]{3}'))]
+my.data$Time <- str_replace_all(my.data$Time, '114:20', '00:00')
+```
+
+Modify `114:20`. 
+
+```{r}
+my.data$Time <- paste(my.data$Date, my.data$Time)
+my.data$Time <- mdy_hm(my.data$Time)
+my.data <- my.data %>%
+  select(-c(`Flight #`, Route, Registration, `cn/In`, Summary)) %>%
+  na.omit()
+```
+
+# Visualizing
+
+```{r time_flow}
+my.data %>%
+  group_by(year(Time)) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(`year(Time)`, count)) +
+  geom_line(color = "gray52") +
+  geom_point(color = "sienna1") +
+  theme_light() +
+  xlab("Year") +
+  ylab("Counts")
+```
+
+The number of air crashes was higher from 1940 to 2005. Next, let's see if the crash is related to a specific number of months, days of the week, or a specific time period. 
+
+```{r}
+p.week <- my.data %>%
+  group_by(wday(Time, week_start = 1, label = TRUE)) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(`wday(Time, week_start = 1, label = TRUE)`, count)) +
+  geom_col(fill = "#90AFC5", width = 0.8) +
+  theme_light() +
+  xlab("Day of Week") +
+  ylab("Counts")
+```
+
+```{r}
+p.month <- my.data %>%
+  group_by(month(Time, label = TRUE)) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(`month(Time, label = TRUE)`, count)) +
+  geom_col(fill = "#336B87", width = 0.8) +
+  theme_light() +
+  xlab("Month") +
+  ylab("Counts")
+```
+
+```{r}
+p.day <- my.data %>%
+  filter(hour(Time) != 0 | minute(Time) != 0) %>%
+  group_by(hour(Time)) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(`hour(Time)`, count)) +
+  geom_col(fill = "#2A3132", width = 0.8) +
+  theme_light() +
+  xlab("Hour") +
+  ylab("Counts") +
+  scale_x_continuous(breaks = seq(0, 24, 4))
+```
+
+A significant increase in the number of air crashes can be seen during certain time periods. But we don't know the exact reason for this increase. 
+
+It is possible that some factors during these specific periods of time have led to a higher probability of air crashes. It could also be that the number of flights increased during the specific time period, which led to an increase in the number of crashes.
+
+
+```{r message=FALSE, warning=FALSE}
+# library(Rmisc)
+```
+
+
+```{r Time_vs_Counts}
+# multiplot(p.week, p.month, p.day, layout = matrix(c(1, 2, 3, 3),
+#                                                   nrow = 2, byrow = TRUE))
+```
+
+```{r}
+my.data <- my.data %>%
+  mutate(Survivors = Aboard - Fatalities,
+         SurvivalRate = Survivors / Aboard) %>% 
+  na.omit()
+```
+
+```{r}
+summary(my.data)
+```
+```{r}
+top_n(count(my.data, Location, sort = TRUE), 10)
+```
+```{r}
+top_n(count(my.data, Operator, sort = TRUE), 10)
+```
+```{r}
+top_n(count(my.data, Type, sort = TRUE), 10)
+```
+```{r time_vs_surrate}
+temp.data <- my.data %>%
+  group_by(year(Time)) %>%
+  summarise(Aboard = sum(Aboard),
+            Fatalities = sum(Fatalities)) %>%
+  ungroup() %>%
+  mutate(Sur = Aboard - Fatalities,
+         SurRate = Sur / Aboard) %>%
+  na.omit()
+
+temp.data %>%
+  ggplot(aes(`year(Time)`, SurRate)) +
+  geom_col(fill = 'gray60') +
+  theme_light() +
+  xlab('Years') +
+  ylab('Survival Rate') +
+  geom_hline(yintercept = 0.166) +
+  geom_text(
+    aes(x = 1908, y = 0.166),
+    label = 'Average',
+    vjust = 1.5,
+    hjust = 0.5,
+    color = 'indianred1'
+  )
+```
+
+
+```{r}
+cluster.data <- my.data %>%
+  select(c(6:7, 9)) %>%
+  scale()
+```
+
+
+```{r}
+k2 <- kmeans(cluster.data, centers = 2, nstart = 25)
+k3 <- kmeans(cluster.data, centers = 3, nstart = 25)
+k4 <- kmeans(cluster.data, centers = 4, nstart = 25)
+k5 <- kmeans(cluster.data, centers = 5, nstart = 25)
+```
+
+
+```{r k-means results}
+p2 <-
+  fviz_cluster(k2, geom = "point", data = cluster.data) + ggtitle("K-means k=2") +
+  theme_light()
+p3 <-
+  fviz_cluster(k3, geom = "point", data = cluster.data) + ggtitle("K-means k=3") +
+  theme_light()
+p4 <-
+  fviz_cluster(k4, geom = "point", data = cluster.data) + ggtitle("K-means k=4") +
+  theme_light()
+p5 <-
+  fviz_cluster(k5, geom = "point", data = cluster.data) + ggtitle("K-means k=5") +
+  theme_light()
+
+grid.arrange(p2, p3, p4, p5)
+```
+```{r elbow}
+fviz_nbclust(cluster.data, kmeans, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2) +
+  theme_light() +
+  theme(title = element_blank())
+```
+
+
+```{r}
+clustered.data <- tibble(my.data, cluster = k3$cluster)
+```
+
+
+```{r}
+(summary_cluster <- clustered.data %>%
+  group_by(cluster) %>%
+  summarise(
+    Counts = n(),
+    Mean_Aboard = mean(Aboard),
+    Mean_Fatalities = mean(Fatalities),
+    Mean_Sur_Rate = mean(SurvivalRate)
+  ))
+```
+
+```{r}
+or <- summary_cluster$Mean_Sur_Rate %>% 
+  rank()
+```
+
+
+```{r}
+clustered.data$cluster_id <-
+  ifelse(
+    clustered.data$cluster == or[3],
+    "Large Passenger High Survival",
+    ifelse(
+      clustered.data$cluster == or[1],
+      "Large Passenger High Fatality",
+      "Small-Midsize Crashes"
+    )
+  )
+```
+
+
+```{r}
+LgSurvive <-
+  clustered.data[clustered.data$cluster_id == "Large Passenger High Survival", ]
+LgFatal <-
+  clustered.data[clustered.data$cluster_id == "Large Passenger High Fatality", ]
+
+Top10TypeSurvive <-
+  top_n(count(LgSurvive, Type, sort = TRUE), 10)
+Top10TypeFatal <-
+  top_n(count(LgFatal, Type, sort = TRUE), 10)
+
+Top10OperSurvive <-
+  top_n(count(LgSurvive, Operator, sort = TRUE), 10)
+Top10OperFatal <- top_n(count(LgFatal, Operator, sort = TRUE), 10)
+```
+
+
+```{r Type10_1}
+Top10TypeSurvive %>%
+  ggplot(aes(x = reorder(Type, n), y = n)) +
+  geom_col(fill = "mediumseagreen") +
+  coord_flip() +
+  # ggtitle("Top 10 Large Passenger High Survival Crashes by Model") +
+  xlab("Plane Model") +
+  ylab("Number of Crashes") +
+  theme_light()
+```
+
+
+```{r Type10_2}
+Top10TypeFatal %>%
+  ggplot(aes(x = reorder(Type, n), y = n)) +
+  geom_col(fill = "orangered3") +
+  coord_flip() +
+  # ggtitle("Top 10 Large Passenger High Fatality Crashes by Model") +
+  xlab("Plane Model") +
+  ylab("Number of Crashes") +
+  theme_light()
+```
+
+
+```{r Op1}
+ggplot(Top10OperSurvive, aes(x = reorder(Operator, n), y = n)) +
+  geom_col(fill = "mediumseagreen") +
+  coord_flip() +
+  # ggtitle("Top Ten Large Passenger High Survival Crashes by Airline") +
+  xlab("Operator") +
+  ylab("Number of Crashes") +
+  theme_light()
+```
+
+
+```{r Op2}
+ggplot(Top10OperFatal, aes(x = reorder(Operator, n), y = n)) +
+  geom_col(fill = "orangered3") +
+  coord_flip() +
+  # ggtitle("Top Ten Large Passenger High Fatality Crashes by Airline") +
+  xlab("Operator") +
+  ylab("Number of Crashes") +
+  theme_light()
+```
+
+```{r}
+Locations <-
+  as.character(clustered.data$Location[clustered.data$cluster != 2])
+Locations <- gsub("Near ", "", Locations)
+Locations <- gsub("Off ", "", Locations)
+Locations <- gsub("off ", "", Locations)
+Locations <- gsub("Czechoslovakia", "Czechia", Locations)
+Locations <- gsub("AFB", "", Locations)
+Locations <- gsub("Llandow Airport, ", "", Locations)
+Locations <- gsub("La Guardia ", "LaGuardia ", Locations)
+Locations <- gsub("Staten Island / ", "", Locations)
+Locations <- gsub("Morrocco", "Morocco", Locations)
+Locations <- gsub("Guadaloupe", "Guadeloupe", Locations)
+Locations <- gsub("USSR", "Russia", Locations)
+Locations <- gsub("Rio de Janerio", "Rio de Janeiro", Locations)
+Locations <- gsub("Papanga", "Pampanga", Locations)
+Locations <- gsub("Island of ", "", Locations)
+Locations <- gsub(", Yugoslavia", "", Locations)
+Locations <- gsub("near Roussillon, ", "", Locations)
+Locations <- gsub("Covington/Hebron, ", "", Locations)
+Locations <- gsub(" (Namibia)", "", Locations)
+Locations <- gsub("Morioko", "Morioka", Locations)
+Locations <- gsub("Mt. Fuji, ", "", Locations)
+Locations <- gsub("Yuhnov", "Yukhnov", Locations)
+Locations <- gsub("Ukraine, Russia", "Ukraine", Locations)
+Locations <- gsub("Staines, Surrey, ", "", Locations)
+Locations <- gsub("Massachusett", "Massachusetts", Locations)
+Locations <- gsub("Corunda", "Coruna", Locations)
+Locations <- gsub("Thirty-five miles west of ", "", Locations)
+Locations <- gsub("Mountains ", "", Locations)
+Locations <- gsub(" near Kampung Ladang, ", "", Locations)
+Locations <- gsub("Elburz Mtns., near ", "", Locations)
+Locations <- gsub("New York, New York", "New York", Locations)
+Locations <- gsub("300 nm NW of ", "", Locations)
+Locations <- gsub("950 nm S of  ", "", Locations)
+Locations <- gsub("Western PacifiOcean, ", "", Locations)
+Locations <- gsub("PacifiOcean", "Pacific Ocean", Locations)
+Locations <- gsub("AtlantiOcean", "Atlantic Ocean", Locations)
+Locations <- gsub("Over the ", "", Locations)
+Locations <- gsub("110 miles SW of ", "", Locations)
+Locations <-
+  gsub("DemocratiRepubliCogo",
+       "Democratic Republic of Congo",
+       Locations)
+Locations <- gsub("Calilfornia", "California", Locations)
+Locations <-
+  gsub(", 570 miles northeast of Natal, Brazil", "", Locations)
+Locations <-
+  gsub(", 100 miles W of Galway Bay, Ireland", "", Locations)
+Locations <- gsub(", 110 miles West of Ireland", "", Locations)
+Locations <-
+  gsub(", 116 miles WSW of Annette Island, Alaska", "", Locations)
+Locations <- gsub("Mariana Islands", "", Locations)
+Locations <- gsub("Atalayasa", "Atalaya", Locations)
+Locations <- gsub("Wusterausen", "Wusterhausen", Locations)
+Locations <- gsub("Vrastsa", "Vratsa", Locations)
+Locations <- gsub("Dneprodzerzhinsk", "Kamianske", Locations)
+Locations <- gsub("At ", "", Locations)
+Locations <- gsub("near Ajaccio, ", "", Locations)
+Locations <- gsub("En route Miami, FL - ", "", Locations)
+Locations <- gsub("near Ueno Village, ", "", Locations)
+Locations <- gsub("French Alps, ", "", Locations)
+Locations <-
+  gsub("Kimpo Air Base", "Gimpo International Airport", Locations)
+Locations <- gsub("Carpich", "Carpish", Locations)
+Locations <- gsub(" (Namibia)", "", Locations)
+Locations <-
+  gsub("Al Fujayrah", "Fujairah International Airport", Locations)
+Locations <- gsub(", Kefallinia, Greece", "", Locations)
+Locations <- gsub("Karatepe Mountains", "Karatepe", Locations)
+Locations <- gsub("Jeddah, ", "", Locations)
+Locations <- gsub("Laskarak, ", "", Locations)
+Locations <- gsub(", Ustica, Italy, ", "", Locations)
+Locations <- gsub("Southern Belarus", "Belarus", Locations)
+Locations <- gsub("Syktyvar", "Syktyvkar", Locations)
+Locations <- gsub("Ko Phuket", "Phuket", Locations)
+Locations <- gsub("Krosnovodsk", "Krasnovodsk", Locations)
+Locations <- gsub("Combi, ", "", Locations)
+Locations <- gsub("Persian Gulf, near ", "", Locations)
+Locations <- gsub("Armenia, ", "", Locations)
+Locations <- gsub("Mt. Saint-Odile, near ", "", Locations)
+Locations <- gsub("Mt. Lalaboy,  ", "", Locations)
+Locations <- gsub("Khorog", "", Locations)
+Locations <- gsub("Tidjika", "Tidjikja", Locations)
+Locations <- gsub("Kahengula, ", "", Locations)
+Locations <- gsub("Domincan", "Dominican", Locations)
+Locations <- gsub("Charkhidadri", "Charkhi Dadri", Locations)
+Locations <- gsub("Massachusettss", "Massachusetts", Locations)
+Locations <- gsub("Amritsar, India / ", "", Locations)
+Locations <- gsub("Republiof", "Republic of", Locations)
+Locations <- gsub("Khorramabed", "Khorramabad", Locations)
+
+# coords <- geocode_OSM(Locations, keep.unfound = TRUE)
+# 
+# saveRDS(coords, file = "coords.RData")
+
+coords <- readRDS(file = "coords.RData")
+```
+
+```{r}
+map.data <- clustered.data[clustered.data$cluster != 2, ]
+
+map.data$Latitude <- coords$lat
+map.data$Longitude <- coords$lon
+
+map.data <- na.omit(map.data)
+```
+
+```{r map}
+map_data("world") %>%
+  ggplot() +
+  coord_fixed() +
+  geom_polygon(aes(x = long, y = lat, group = group),
+               fill = "white",
+               colour = "grey50") +
+  geom_point(
+    data = map.data,
+    aes(
+      x = Longitude,
+      y = Latitude,
+      color = cluster_id,
+      size = 1 - SurvivalRate
+    ),
+    alpha = 0.2
+  ) +
+  theme_light() +
+  # ggtitle("Large Passenger Plane Crash Locations 1933 - 2009") +
+  scale_color_manual("Cluster", values = alpha(c("orangered3", "green"))) +
+  theme(legend.position = "none") +
+  scale_size(range = c(0, 2.5))
+```
+

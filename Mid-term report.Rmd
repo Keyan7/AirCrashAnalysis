@@ -1,0 +1,10 @@
+---
+title: "Mid-term report"
+author: Keyan Chen
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+I have written my current work directly in the project report, see `Project.pdf`. 
+
+Future work includes exploration of the geographical location of air crashes, analysis of high and low survival rates, etc. 

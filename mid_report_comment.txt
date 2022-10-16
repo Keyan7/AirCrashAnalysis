@@ -1,0 +1,4 @@
+Please never paste R output into any writing.  You should report the results by words, tables, etc.  Do not assume your readers know R at all.
+
+Total: 7/7
+

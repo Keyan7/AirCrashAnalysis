@@ -1,0 +1,12 @@
+# Project Description
+
+This database is about accidents of different airlines from 1985 to 2014. The variables include the name of the airline, the total number of available seats, the number of accidents and fatal accidents and the number of casualties. I hope to analyze the flight safety of different airlines through this database, mainly from the following aspects:
+
+1. The total number of accidents and fatal accidents of different airlines has decreased every five years. (it can reflect the importance of airlines on flight safety). 
+
+2. The fatalities of different airlines and the proportion of fatal accidents to the total number of accidents. (In recent years, accidents have occurred mainly due to mechanical failures or procedural problems, while reducing the damage caused by accidents is related to the professionalism of the crew.)
+
+3. The correlation between the number of accidents and the available seats. (Large airlines may increase the overall number of accidents due to the large annual capacity.)
+
+4. If there is a high correlation between the number of accidents and the number of available seats, how to eliminate the impact of this correlation on the flight safety of different airlines? (The number of available seats/the number of accidents can be used as a reference factor)
+
